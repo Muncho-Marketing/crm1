@@ -26,6 +26,21 @@ function App() {
     // Check for existing Supabase session
     const checkSession = async () => {
       try {
+        console.log('Checking Supabase session...');
+        
+        // Test basic connection first
+        const { data: testData, error: testError } = await supabase
+          .from('restaurants')
+          .select('count')
+          .limit(1);
+        
+        if (testError) {
+          console.warn('Database connection test failed:', testError);
+          // Continue anyway - might be a permissions issue
+        } else {
+          console.log('Database connection test successful');
+        }
+
         const { data: { session }, error } = await supabase.auth.getSession();
         
         if (error) {
@@ -35,10 +50,14 @@ function App() {
         }
 
         if (session?.user) {
+          console.log('Found existing session for user:', session.user.id);
           await handleSupabaseUser(session.user);
+        } else {
+          console.log('No existing session found');
         }
       } catch (error) {
         console.error('Error checking session:', error);
+        // Don't block the app - show login page
       } finally {
         setLoadingSession(false);
       }
@@ -48,6 +67,7 @@ function App() {
 
     // Listen for auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('Auth state changed:', event);
       if (event === 'SIGNED_IN' && session?.user) {
         await handleSupabaseUser(session.user);
       } else if (event === 'SIGNED_OUT') {
@@ -62,6 +82,8 @@ function App() {
 
   const handleSupabaseUser = async (supabaseUser: SupabaseUser) => {
     try {
+      console.log('Handling user:', supabaseUser.id);
+      
       // Check if user has a restaurant (onboarding complete)
       const { data: restaurants, error } = await supabase
         .from('restaurants')
@@ -71,8 +93,15 @@ function App() {
 
       if (error) {
         console.error('Error fetching restaurant:', error);
-        // Default to onboarding if there's an error
+        // If there's a database error, assume onboarding is needed
         setAppState('onboarding');
+        const userData: User = {
+          firstName: supabaseUser.user_metadata?.first_name || supabaseUser.email?.split('@')[0] || 'User',
+          role: 'admin',
+          onboardingComplete: false,
+          email: supabaseUser.email
+        };
+        setUser(userData);
         return;
       }
 
@@ -89,8 +118,10 @@ function App() {
 
       // Determine app state based on onboarding status
       if (restaurant?.onboarding_complete) {
+        console.log('User has completed onboarding, showing dashboard');
         setAppState('dashboard');
       } else {
+        console.log('User needs onboarding');
         const onboardingProgress = localStorage.getItem('muncho_onboarding_progress');
         setAppState('onboarding');
         if (onboardingProgress) {
@@ -99,7 +130,15 @@ function App() {
       }
     } catch (error) {
       console.error('Error handling user:', error);
-      setAppState('onboarding'); // Default to onboarding if there's an error
+      // Default to onboarding if there's an error
+      setAppState('onboarding');
+      const userData: User = {
+        firstName: supabaseUser.user_metadata?.first_name || supabaseUser.email?.split('@')[0] || 'User',
+        role: 'admin',
+        onboardingComplete: false,
+        email: supabaseUser.email
+      };
+      setUser(userData);
     }
   };
 
