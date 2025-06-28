@@ -72,7 +72,7 @@ function App() {
     checkSession();
 
     // Listen for auth state changes
-    authSubscription.current = supabase.auth.onAuthStateChange(async (event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       console.log('Auth state changed:', event, 'Resetting:', isResetting.current);
       
       // Ignore auth state changes during reset
@@ -91,9 +91,11 @@ function App() {
       }
     });
 
+    authSubscription.current = subscription;
+
     return () => {
       if (authSubscription.current) {
-        authSubscription.current.subscription.unsubscribe();
+        authSubscription.current.unsubscribe();
       }
     };
   }, []);
@@ -227,7 +229,7 @@ function App() {
       
       // Unsubscribe from auth changes temporarily
       if (authSubscription.current) {
-        authSubscription.current.subscription.unsubscribe();
+        authSubscription.current.unsubscribe();
         authSubscription.current = null;
       }
       
@@ -250,7 +252,7 @@ function App() {
       isResetting.current = false;
       
       // Re-establish auth listener
-      authSubscription.current = supabase.auth.onAuthStateChange(async (event, session) => {
+      const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
         console.log('Auth state changed (after reset):', event);
         
         if (isResetting.current) {
@@ -267,6 +269,8 @@ function App() {
           setLoadingSession(false);
         }
       });
+
+      authSubscription.current = subscription;
       
       showToast('Reset complete - please sign in again', 'success');
     } catch (error) {
