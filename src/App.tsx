@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import LoginPage from './components/LoginPage';
 import OnboardingWizard from './components/OnboardingWizard';
 import Dashboard from './components/Dashboard';
@@ -21,6 +21,10 @@ function App() {
   const [appState, setAppState] = useState<AppState>('login');
   const [user, setUser] = useState<User | null>(null);
   const [loadingSession, setLoadingSession] = useState(true);
+  
+  // Flag to prevent auth state processing during emergency reset
+  const isResetting = useRef(false);
+  const authSubscription = useRef<any>(null);
 
   useEffect(() => {
     // Check for existing Supabase session
@@ -49,35 +53,49 @@ function App() {
           return;
         }
 
-        if (session?.user) {
+        if (session?.user && !isResetting.current) {
           console.log('Found existing session for user:', session.user.id);
           await handleSupabaseUser(session.user);
         } else {
-          console.log('No existing session found');
+          console.log('No existing session found or resetting in progress');
         }
       } catch (error) {
         console.error('Error checking session:', error);
         // Don't block the app - show login page
       } finally {
-        setLoadingSession(false);
+        if (!isResetting.current) {
+          setLoadingSession(false);
+        }
       }
     };
 
     checkSession();
 
     // Listen for auth state changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('Auth state changed:', event);
+    authSubscription.current = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('Auth state changed:', event, 'Resetting:', isResetting.current);
+      
+      // Ignore auth state changes during reset
+      if (isResetting.current) {
+        console.log('Ignoring auth state change during reset');
+        return;
+      }
+      
       if (event === 'SIGNED_IN' && session?.user) {
         await handleSupabaseUser(session.user);
       } else if (event === 'SIGNED_OUT') {
         setUser(null);
         setAppState('login');
         localStorage.removeItem('muncho_onboarding_progress');
+        setLoadingSession(false);
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      if (authSubscription.current) {
+        authSubscription.current.subscription.unsubscribe();
+      }
+    };
   }, []);
 
   const handleSupabaseUser = async (supabaseUser: SupabaseUser) => {
@@ -110,6 +128,7 @@ function App() {
         console.log('Database error - defaulting to onboarding');
         setUser(userData);
         setAppState('onboarding');
+        setLoadingSession(false);
         return;
       }
 
@@ -134,6 +153,8 @@ function App() {
           showToast('Resuming your setup where you left off...', 'info');
         }
       }
+      
+      setLoadingSession(false);
     } catch (error) {
       console.error('Error handling user:', error);
       // Default to onboarding if there's an error
@@ -145,6 +166,7 @@ function App() {
       };
       setUser(userData);
       setAppState('onboarding');
+      setLoadingSession(false);
     }
   };
 
@@ -200,23 +222,63 @@ function App() {
     try {
       console.log('Emergency reset triggered...');
       
+      // Set reset flag to prevent auth state listener from interfering
+      isResetting.current = true;
+      
+      // Unsubscribe from auth changes temporarily
+      if (authSubscription.current) {
+        authSubscription.current.subscription.unsubscribe();
+        authSubscription.current = null;
+      }
+      
       // Force clear everything
       localStorage.clear();
       sessionStorage.clear();
       
-      // Reset all state
+      // Reset all state immediately
       setUser(null);
       setAppState('login');
       setLoadingSession(false);
       
-      // Force sign out
+      // Force sign out with global scope
       await supabase.auth.signOut({ scope: 'global' });
       
-      showToast('Reset complete - please sign in again', 'info');
+      // Wait a moment for signout to complete
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // Clear reset flag
+      isResetting.current = false;
+      
+      // Re-establish auth listener
+      authSubscription.current = supabase.auth.onAuthStateChange(async (event, session) => {
+        console.log('Auth state changed (after reset):', event);
+        
+        if (isResetting.current) {
+          console.log('Ignoring auth state change during reset');
+          return;
+        }
+        
+        if (event === 'SIGNED_IN' && session?.user) {
+          await handleSupabaseUser(session.user);
+        } else if (event === 'SIGNED_OUT') {
+          setUser(null);
+          setAppState('login');
+          localStorage.removeItem('muncho_onboarding_progress');
+          setLoadingSession(false);
+        }
+      });
+      
+      showToast('Reset complete - please sign in again', 'success');
     } catch (error) {
       console.error('Emergency reset error:', error);
+      // Clear reset flag even on error
+      isResetting.current = false;
+      
       // Force reload as last resort
-      window.location.reload();
+      showToast('Forcing page reload...', 'info');
+      setTimeout(() => {
+        window.location.reload();
+      }, 1000);
     }
   };
 
@@ -231,9 +293,10 @@ function App() {
           {/* Emergency Reset Button */}
           <button
             onClick={handleEmergencyReset}
-            className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm font-medium"
+            disabled={isResetting.current}
+            className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Reset to Login
+            {isResetting.current ? 'Resetting...' : 'Reset to Login'}
           </button>
           
           <p className="text-xs text-gray-500 mt-2 max-w-xs mx-auto">
