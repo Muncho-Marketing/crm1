@@ -291,7 +291,7 @@ export const useDashboardData = (timeframe: string = 'Today') => {
           .from('credits_balance')
           .select('*')
           .eq('restaurant_id', restaurantId)
-          .single();
+          .maybeSingle();
         credits = creditsData;
       } catch (err) {
         console.warn('Credits fetch failed:', err);
