@@ -84,35 +84,41 @@ function App() {
     try {
       console.log('Handling user:', supabaseUser.id);
       
+      // Create user data first with defaults
+      const userData: User = {
+        firstName: supabaseUser.user_metadata?.first_name || supabaseUser.email?.split('@')[0] || 'User',
+        role: 'admin',
+        onboardingComplete: false,
+        email: supabaseUser.email
+      };
+
+      console.log('Created user data:', userData);
+      
       // Check if user has a restaurant (onboarding complete)
+      console.log('Fetching restaurant for user...');
       const { data: restaurants, error } = await supabase
         .from('restaurants')
         .select('onboarding_complete')
         .eq('owner_id', supabaseUser.id)
         .limit(1);
 
+      console.log('Restaurant query result:', { restaurants, error });
+
       if (error) {
         console.error('Error fetching restaurant:', error);
         // If there's a database error, assume onboarding is needed
-        setAppState('onboarding');
-        const userData: User = {
-          firstName: supabaseUser.user_metadata?.first_name || supabaseUser.email?.split('@')[0] || 'User',
-          role: 'admin',
-          onboardingComplete: false,
-          email: supabaseUser.email
-        };
+        console.log('Database error - defaulting to onboarding');
         setUser(userData);
+        setAppState('onboarding');
         return;
       }
 
       const restaurant = restaurants && restaurants.length > 0 ? restaurants[0] : null;
+      console.log('Restaurant found:', restaurant);
 
-      const userData: User = {
-        firstName: supabaseUser.user_metadata?.first_name || supabaseUser.email?.split('@')[0] || 'User',
-        role: 'admin',
-        onboardingComplete: restaurant?.onboarding_complete || false,
-        email: supabaseUser.email
-      };
+      // Update user data with onboarding status
+      userData.onboardingComplete = restaurant?.onboarding_complete || false;
+      console.log('Updated user data:', userData);
 
       setUser(userData);
 
@@ -131,7 +137,6 @@ function App() {
     } catch (error) {
       console.error('Error handling user:', error);
       // Default to onboarding if there's an error
-      setAppState('onboarding');
       const userData: User = {
         firstName: supabaseUser.user_metadata?.first_name || supabaseUser.email?.split('@')[0] || 'User',
         role: 'admin',
@@ -139,6 +144,7 @@ function App() {
         email: supabaseUser.email
       };
       setUser(userData);
+      setAppState('onboarding');
     }
   };
 
