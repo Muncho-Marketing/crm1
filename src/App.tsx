@@ -165,11 +165,58 @@ function App() {
 
   const handleLogout = async () => {
     try {
-      await supabase.auth.signOut();
-      showToast('You have been logged out successfully.', 'info');
+      console.log('Logging out user...');
+      
+      // Clear all local storage
+      localStorage.removeItem('muncho_onboarding_progress');
+      localStorage.removeItem('muncho_onboarding_complete');
+      localStorage.removeItem('muncho_onboarding_status');
+      localStorage.removeItem('muncho_remember_token');
+      localStorage.removeItem('muncho_login_attempts');
+      localStorage.removeItem('muncho_login_lockout');
+      
+      // Reset app state immediately
+      setUser(null);
+      setAppState('login');
+      setLoadingSession(false);
+      
+      // Sign out from Supabase
+      const { error } = await supabase.auth.signOut();
+      
+      if (error) {
+        console.error('Error signing out:', error);
+        showToast('Logged out (with minor issues)', 'info');
+      } else {
+        showToast('Successfully logged out', 'success');
+      }
     } catch (error) {
-      console.error('Error signing out:', error);
-      showToast('Error signing out. Please try again.', 'error');
+      console.error('Error during logout:', error);
+      // Even if there's an error, we've already reset the local state
+      showToast('Logged out locally', 'info');
+    }
+  };
+
+  const handleEmergencyReset = async () => {
+    try {
+      console.log('Emergency reset triggered...');
+      
+      // Force clear everything
+      localStorage.clear();
+      sessionStorage.clear();
+      
+      // Reset all state
+      setUser(null);
+      setAppState('login');
+      setLoadingSession(false);
+      
+      // Force sign out
+      await supabase.auth.signOut({ scope: 'global' });
+      
+      showToast('Reset complete - please sign in again', 'info');
+    } catch (error) {
+      console.error('Emergency reset error:', error);
+      // Force reload as last resort
+      window.location.reload();
     }
   };
 
@@ -181,16 +228,16 @@ function App() {
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
           <p className="text-gray-600 mb-4">Loading...</p>
           
-          {/* Emergency Logout Button */}
+          {/* Emergency Reset Button */}
           <button
-            onClick={handleLogout}
-            className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm"
+            onClick={handleEmergencyReset}
+            className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm font-medium"
           >
             Reset to Login
           </button>
           
-          <p className="text-xs text-gray-500 mt-2">
-            Stuck? Click "Reset to Login" to start fresh
+          <p className="text-xs text-gray-500 mt-2 max-w-xs mx-auto">
+            Stuck? Click "Reset to Login" to clear all data and start fresh
           </p>
         </div>
       </div>
