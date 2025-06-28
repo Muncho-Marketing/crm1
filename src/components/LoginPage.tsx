@@ -31,6 +31,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onShowToast, onLoginSuccess }) =>
   
   const emailRef = useRef<HTMLInputElement>(null);
   const pageLoadTime = useRef(Date.now());
+  const submitTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     // Auto-focus email field
@@ -41,7 +42,12 @@ const LoginPage: React.FC<LoginPageProps> = ({ onShowToast, onLoginSuccess }) =>
       console.log('Event: login_abandon - User spent more than 10 seconds without submitting');
     }, 10000);
 
-    return () => clearTimeout(abandonTimer);
+    return () => {
+      clearTimeout(abandonTimer);
+      if (submitTimeoutRef.current) {
+        clearTimeout(submitTimeoutRef.current);
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -146,13 +152,38 @@ const LoginPage: React.FC<LoginPageProps> = ({ onShowToast, onLoginSuccess }) =>
     }
   };
 
+  const resetFormState = () => {
+    setIsLoading(false);
+    if (submitTimeoutRef.current) {
+      clearTimeout(submitTimeoutRef.current);
+      submitTimeoutRef.current = null;
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!isFormValid()) return;
+    // Prevent double submission
+    if (isLoading) {
+      console.log('Form already submitting, ignoring duplicate submission');
+      return;
+    }
+    
+    if (!isFormValid()) {
+      console.log('Form validation failed');
+      return;
+    }
 
+    console.log('Starting form submission...');
     setIsLoading(true);
     setErrors({});
+
+    // Set a timeout to reset loading state if submission takes too long
+    submitTimeoutRef.current = setTimeout(() => {
+      console.warn('Form submission timeout - resetting state');
+      resetFormState();
+      setErrors({ general: 'Request timed out. Please try again.' });
+    }, 30000); // 30 second timeout
 
     // Validate fields
     const newErrors: { email?: string; password?: string; confirmPassword?: string; firstName?: string } = {};
@@ -177,13 +208,16 @@ const LoginPage: React.FC<LoginPageProps> = ({ onShowToast, onLoginSuccess }) =>
 
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
-      setIsLoading(false);
+      resetFormState();
       return;
     }
 
     try {
+      console.log(`Attempting ${isSignUp ? 'sign up' : 'sign in'} for:`, email);
+      
       if (isSignUp) {
         // Sign up new user
+        console.log('Calling supabase.auth.signUp...');
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
@@ -194,7 +228,10 @@ const LoginPage: React.FC<LoginPageProps> = ({ onShowToast, onLoginSuccess }) =>
           }
         });
 
+        console.log('Sign up response:', { data, error });
+
         if (error) {
+          console.error('Sign up error:', error);
           if (error.message.includes('already registered')) {
             setErrors({ general: 'An account with this email already exists. Please sign in instead.' });
           } else {
@@ -204,6 +241,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onShowToast, onLoginSuccess }) =>
         }
 
         if (data.user) {
+          console.log('Sign up successful, user created:', data.user.id);
           onShowToast('Account created successfully! Welcome to Muncho CRM!', 'success');
           
           // The auth state change listener in App.tsx will handle the rest
@@ -215,21 +253,30 @@ const LoginPage: React.FC<LoginPageProps> = ({ onShowToast, onLoginSuccess }) =>
           };
           
           onLoginSuccess(userData);
+        } else {
+          console.warn('Sign up completed but no user returned');
+          setErrors({ general: 'Account creation completed but verification may be required.' });
         }
       } else {
         // Sign in existing user
+        console.log('Calling supabase.auth.signInWithPassword...');
         const { data, error } = await supabase.auth.signInWithPassword({
           email,
           password,
         });
 
+        console.log('Sign in response:', { data, error });
+
         if (error) {
+          console.error('Sign in error:', error);
           handleFailedAttempt();
           setErrors({ general: 'Invalid email or password. Please try again.' });
           return;
         }
 
         if (data.user) {
+          console.log('Sign in successful for user:', data.user.id);
+          
           // Clear login attempts on success
           localStorage.removeItem('muncho_login_attempts');
           localStorage.removeItem('muncho_login_lockout');
@@ -242,6 +289,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onShowToast, onLoginSuccess }) =>
           }
 
           // Get user's restaurant to determine onboarding status
+          console.log('Fetching user restaurant data...');
           const { data: restaurants } = await supabase
             .from('restaurants')
             .select('onboarding_complete')
@@ -259,13 +307,17 @@ const LoginPage: React.FC<LoginPageProps> = ({ onShowToast, onLoginSuccess }) =>
           
           onShowToast(`Welcome back, ${userData.firstName}!`, 'success');
           onLoginSuccess(userData);
+        } else {
+          console.warn('Sign in completed but no user returned');
+          setErrors({ general: 'Sign in completed but user data is missing.' });
         }
       }
     } catch (error) {
-      console.error('Auth error:', error);
+      console.error('Unexpected auth error:', error);
       setErrors({ general: 'Something went wrong. Please try again.' });
     } finally {
-      setIsLoading(false);
+      console.log('Form submission completed, resetting state');
+      resetFormState();
     }
   };
 
@@ -281,6 +333,8 @@ const LoginPage: React.FC<LoginPageProps> = ({ onShowToast, onLoginSuccess }) =>
   };
 
   const toggleMode = () => {
+    // Reset loading state when switching modes
+    resetFormState();
     setIsSignUp(!isSignUp);
     setErrors({});
     setPassword('');
@@ -357,12 +411,12 @@ const LoginPage: React.FC<LoginPageProps> = ({ onShowToast, onLoginSuccess }) =>
                   value={firstName}
                   onChange={handleFirstNameChange}
                   placeholder="John"
-                  disabled={isLocked}
+                  disabled={isLocked || isLoading}
                   className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
                     errors.firstName
                       ? 'border-red-300 bg-red-50'
                       : 'border-gray-300 bg-white hover:border-gray-400'
-                  } ${isLocked ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  } ${(isLocked || isLoading) ? 'opacity-50 cursor-not-allowed' : ''}`}
                 />
                 {errors.firstName && (
                   <p className="mt-2 text-sm text-red-600 flex items-center space-x-1">
@@ -385,12 +439,12 @@ const LoginPage: React.FC<LoginPageProps> = ({ onShowToast, onLoginSuccess }) =>
                 value={email}
                 onChange={handleEmailChange}
                 placeholder="you@restaurant.com"
-                disabled={isLocked}
+                disabled={isLocked || isLoading}
                 className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
                   errors.email
                     ? 'border-red-300 bg-red-50'
                     : 'border-gray-300 bg-white hover:border-gray-400'
-                } ${isLocked ? 'opacity-50 cursor-not-allowed' : ''}`}
+                } ${(isLocked || isLoading) ? 'opacity-50 cursor-not-allowed' : ''}`}
               />
               {errors.email && (
                 <p className="mt-2 text-sm text-red-600 flex items-center space-x-1">
@@ -412,17 +466,17 @@ const LoginPage: React.FC<LoginPageProps> = ({ onShowToast, onLoginSuccess }) =>
                   value={password}
                   onChange={handlePasswordChange}
                   placeholder="••••••••"
-                  disabled={isLocked}
+                  disabled={isLocked || isLoading}
                   className={`w-full px-4 py-3 pr-12 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
                     errors.password
                       ? 'border-red-300 bg-red-50'
                       : 'border-gray-300 bg-white hover:border-gray-400'
-                  } ${isLocked ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  } ${(isLocked || isLoading) ? 'opacity-50 cursor-not-allowed' : ''}`}
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  disabled={isLocked}
+                  disabled={isLocked || isLoading}
                   className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700 transition-colors disabled:opacity-50"
                 >
                   {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
@@ -449,17 +503,17 @@ const LoginPage: React.FC<LoginPageProps> = ({ onShowToast, onLoginSuccess }) =>
                     value={confirmPassword}
                     onChange={handleConfirmPasswordChange}
                     placeholder="••••••••"
-                    disabled={isLocked}
+                    disabled={isLocked || isLoading}
                     className={`w-full px-4 py-3 pr-12 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
                       errors.confirmPassword
                         ? 'border-red-300 bg-red-50'
                         : 'border-gray-300 bg-white hover:border-gray-400'
-                    } ${isLocked ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    } ${(isLocked || isLoading) ? 'opacity-50 cursor-not-allowed' : ''}`}
                   />
                   <button
                     type="button"
                     onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                    disabled={isLocked}
+                    disabled={isLocked || isLoading}
                     className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700 transition-colors disabled:opacity-50"
                   >
                     {showConfirmPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
@@ -482,7 +536,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onShowToast, onLoginSuccess }) =>
                   id="remember"
                   checked={rememberMe}
                   onChange={(e) => setRememberMe(e.target.checked)}
-                  disabled={isLocked}
+                  disabled={isLocked || isLoading}
                   className="mt-1 w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 disabled:opacity-50"
                 />
                 <label htmlFor="remember" className="text-sm text-gray-700">
@@ -525,7 +579,8 @@ const LoginPage: React.FC<LoginPageProps> = ({ onShowToast, onLoginSuccess }) =>
               <div className="text-center">
                 <button
                   onClick={handleForgotPassword}
-                  className="text-blue-600 hover:text-blue-700 text-sm font-medium transition-colors"
+                  disabled={isLoading}
+                  className="text-blue-600 hover:text-blue-700 text-sm font-medium transition-colors disabled:opacity-50"
                 >
                   Forgot Password?
                 </button>
@@ -535,7 +590,8 @@ const LoginPage: React.FC<LoginPageProps> = ({ onShowToast, onLoginSuccess }) =>
             <div className="text-center">
               <button
                 onClick={toggleMode}
-                className="text-gray-600 hover:text-gray-800 text-sm transition-colors"
+                disabled={isLoading}
+                className="text-gray-600 hover:text-gray-800 text-sm transition-colors disabled:opacity-50"
               >
                 {isSignUp ? (
                   <>Already have an account? <span className="font-medium text-blue-600">Sign in</span></>
@@ -548,7 +604,8 @@ const LoginPage: React.FC<LoginPageProps> = ({ onShowToast, onLoginSuccess }) =>
             <div className="text-center">
               <button
                 onClick={() => setShowHelpModal(true)}
-                className="text-gray-500 hover:text-gray-700 text-sm flex items-center justify-center space-x-1 mx-auto transition-colors"
+                disabled={isLoading}
+                className="text-gray-500 hover:text-gray-700 text-sm flex items-center justify-center space-x-1 mx-auto transition-colors disabled:opacity-50"
               >
                 <HelpCircle className="w-4 h-4" />
                 <span>Login Help</span>
