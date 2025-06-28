@@ -179,7 +179,19 @@ function App() {
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading...</p>
+          <p className="text-gray-600 mb-4">Loading...</p>
+          
+          {/* Emergency Logout Button */}
+          <button
+            onClick={handleLogout}
+            className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm"
+          >
+            Reset to Login
+          </button>
+          
+          <p className="text-xs text-gray-500 mt-2">
+            Stuck? Click "Reset to Login" to start fresh
+          </p>
         </div>
       </div>
     );
