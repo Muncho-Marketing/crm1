@@ -573,6 +573,37 @@ export const useDashboardData = (timeframe: string = 'Today') => {
     } catch (err) {
       console.error('Error fetching dashboard data:', err);
       setError(err instanceof Error ? err.message : 'Failed to fetch dashboard data');
+      
+      // Set fallback data to prevent infinite loading
+      const fallbackData: DashboardData = {
+        totalSales: 0,
+        totalOrders: 0,
+        totalCustomers: 0,
+        newCustomers: 0,
+        repeatCustomers: 0,
+        rewardsRedeemed: 0,
+        salesData: [],
+        visitsData: [],
+        activeCustomers: 0,
+        inactiveCustomers: 0,
+        credits: { sms: 0, email: 0, whatsappUtility: 0, whatsappMarketing: 0 },
+        revenueFromCrm: 0,
+        visitsFromCrm: 0,
+        averageOrderValue: 0,
+        averageVisitsPerYear: 0,
+        loyaltyStats: { redemptions: 0, revenueGain: 0, redemptionRate: 0 },
+        campaignStats: { totalSent: 0, customersVisited: 0, revenueGain: 0 },
+        feedbackStats: { totalFeedbacks: 0, averageRating: 0, negativeFeedback: 0 },
+        autoCampaignStats: { currentlyActive: 0, customersVisited: 0, revenueGain: 0 },
+        qrCodeStats: { activeQrCodes: 0, customersCaptured: 0, revenue: 0 },
+        referralStats: { potentialCustomers: 0, newCustomers: 0, revenue: 0 },
+        customerFrequency: [],
+        topRewards: [],
+        upcomingCelebrations: [],
+        profileCompletion: { percentage: 0, completedCount: 0, totalCount: 0 }
+      };
+      
+      setData(fallbackData);
     } finally {
       setLoading(false);
     }
