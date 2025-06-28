@@ -175,12 +175,16 @@ export const useDashboardData = (timeframe: string = 'Today') => {
       
       if (userError) {
         console.error('User authentication error:', userError);
-        throw new Error(`Authentication failed: ${userError.message}`);
+        // Use fallback data instead of throwing error
+        setData(createFallbackData());
+        return;
       }
       
       if (!user) {
         console.error('No authenticated user found');
-        throw new Error('User not authenticated');
+        // Use fallback data instead of throwing error
+        setData(createFallbackData());
+        return;
       }
       
       console.log('Authenticated user found:', user.id);
@@ -197,8 +201,7 @@ export const useDashboardData = (timeframe: string = 'Today') => {
       
       if (restaurantError) {
         console.error('Restaurant fetch error:', restaurantError);
-        // Don't throw error - use fallback data
-        console.log('Using fallback data due to restaurant fetch error');
+        // Use fallback data instead of throwing error
         setData(createFallbackData());
         return;
       }
@@ -214,7 +217,7 @@ export const useDashboardData = (timeframe: string = 'Today') => {
       const restaurantId = restaurants[0].id;
       console.log('Using restaurant ID:', restaurantId);
       
-      // Try to fetch data, but use fallbacks if any query fails
+      // Initialize all data arrays
       let orders = [];
       let customers = [];
       let campaigns = [];
@@ -224,87 +227,144 @@ export const useDashboardData = (timeframe: string = 'Today') => {
       let credits = null;
       let loyaltyRewards = [];
 
+      // Fetch all data with individual error handling
       try {
-        const { data: ordersData } = await supabase
+        console.log('Fetching orders...');
+        const { data: ordersData, error: ordersError } = await supabase
           .from('orders')
           .select('*')
           .eq('restaurant_id', restaurantId)
           .gte('order_date', startDate.toISOString())
           .lte('order_date', endDate.toISOString());
-        orders = ordersData || [];
+        
+        if (ordersError) {
+          console.warn('Orders fetch failed:', ordersError);
+        } else {
+          orders = ordersData || [];
+          console.log('Orders fetched:', orders.length);
+        }
       } catch (err) {
-        console.warn('Orders fetch failed:', err);
+        console.warn('Orders fetch exception:', err);
       }
 
       try {
-        const { data: customersData } = await supabase
+        console.log('Fetching customers...');
+        const { data: customersData, error: customersError } = await supabase
           .from('customers')
           .select('*')
           .eq('restaurant_id', restaurantId);
-        customers = customersData || [];
+        
+        if (customersError) {
+          console.warn('Customers fetch failed:', customersError);
+        } else {
+          customers = customersData || [];
+          console.log('Customers fetched:', customers.length);
+        }
       } catch (err) {
-        console.warn('Customers fetch failed:', err);
+        console.warn('Customers fetch exception:', err);
       }
 
       try {
-        const { data: campaignsData } = await supabase
+        console.log('Fetching campaigns...');
+        const { data: campaignsData, error: campaignsError } = await supabase
           .from('campaigns')
           .select('*')
           .eq('restaurant_id', restaurantId);
-        campaigns = campaignsData || [];
+        
+        if (campaignsError) {
+          console.warn('Campaigns fetch failed:', campaignsError);
+        } else {
+          campaigns = campaignsData || [];
+          console.log('Campaigns fetched:', campaigns.length);
+        }
       } catch (err) {
-        console.warn('Campaigns fetch failed:', err);
+        console.warn('Campaigns fetch exception:', err);
       }
 
       try {
-        const { data: redemptionsData } = await supabase
+        console.log('Fetching redemptions...');
+        const { data: redemptionsData, error: redemptionsError } = await supabase
           .from('reward_redemptions')
           .select('*, loyalty_rewards(*)')
           .eq('restaurant_id', restaurantId);
-        redemptions = redemptionsData || [];
+        
+        if (redemptionsError) {
+          console.warn('Redemptions fetch failed:', redemptionsError);
+        } else {
+          redemptions = redemptionsData || [];
+          console.log('Redemptions fetched:', redemptions.length);
+        }
       } catch (err) {
-        console.warn('Redemptions fetch failed:', err);
+        console.warn('Redemptions fetch exception:', err);
       }
 
       try {
-        const { data: feedbackData } = await supabase
+        console.log('Fetching feedback...');
+        const { data: feedbackData, error: feedbackError } = await supabase
           .from('feedback')
           .select('*')
           .eq('restaurant_id', restaurantId);
-        feedback = feedbackData || [];
+        
+        if (feedbackError) {
+          console.warn('Feedback fetch failed:', feedbackError);
+        } else {
+          feedback = feedbackData || [];
+          console.log('Feedback fetched:', feedback.length);
+        }
       } catch (err) {
-        console.warn('Feedback fetch failed:', err);
+        console.warn('Feedback fetch exception:', err);
       }
 
       try {
-        const { data: qrCodesData } = await supabase
+        console.log('Fetching QR codes...');
+        const { data: qrCodesData, error: qrCodesError } = await supabase
           .from('qr_codes')
           .select('*')
           .eq('restaurant_id', restaurantId);
-        qrCodes = qrCodesData || [];
+        
+        if (qrCodesError) {
+          console.warn('QR codes fetch failed:', qrCodesError);
+        } else {
+          qrCodes = qrCodesData || [];
+          console.log('QR codes fetched:', qrCodes.length);
+        }
       } catch (err) {
-        console.warn('QR codes fetch failed:', err);
+        console.warn('QR codes fetch exception:', err);
       }
 
       try {
-        const { data: creditsData } = await supabase
+        console.log('Fetching credits...');
+        const { data: creditsData, error: creditsError } = await supabase
           .from('credits_balance')
           .select('*')
           .eq('restaurant_id', restaurantId)
           .maybeSingle();
-        credits = creditsData;
+        
+        if (creditsError) {
+          console.warn('Credits fetch failed:', creditsError);
+        } else {
+          credits = creditsData;
+          console.log('Credits fetched:', !!credits);
+        }
       } catch (err) {
-        console.warn('Credits fetch failed:', err);
+        console.warn('Credits fetch exception:', err);
       }
 
       try {
-        const { data: loyaltyRewardsData } = await supabase
+        console.log('Fetching loyalty rewards...');
+        const { data: loyaltyRewardsData, error: loyaltyRewardsError } = await supabase
           .from('loyalty_rewards')
           .select('*')
           .eq('restaurant_id', restaurantId);
-        loyaltyRewards = loyaltyRewardsData || [];
+        
+        if (loyaltyRewardsError) {
+          console.warn('Loyalty rewards fetch failed:', loyaltyRewardsError);
+        } else {
+          loyaltyRewards = loyaltyRewardsData || [];
+          console.log('Loyalty rewards fetched:', loyaltyRewards.length);
+        }
       } catch (err) {
-        console.warn('Loyalty rewards fetch failed:', err);
+        console.warn('Loyalty rewards fetch exception:', err);
       }
 
       console.log('Data processing started with:', {
@@ -318,9 +378,9 @@ export const useDashboardData = (timeframe: string = 'Today') => {
         loyaltyRewards: loyaltyRewards.length
       });
 
-      // Calculate metrics
+      // Calculate metrics safely
       const completedOrders = orders.filter(order => order.status === 'completed');
-      const totalSales = completedOrders.reduce((sum, order) => sum + (order.total_amount || 0), 0);
+      const totalSales = completedOrders.reduce((sum, order) => sum + (Number(order.total_amount) || 0), 0);
       const totalOrders = completedOrders.length;
       
       // Customer metrics
@@ -354,7 +414,7 @@ export const useDashboardData = (timeframe: string = 'Today') => {
           order.order_date && order.order_date.startsWith(dateStr) && order.status === 'completed'
         );
         
-        const dayAmount = dayOrders.reduce((sum, order) => sum + (order.total_amount || 0), 0);
+        const dayAmount = dayOrders.reduce((sum, order) => sum + (Number(order.total_amount) || 0), 0);
         const dayVisits = dayOrders.length;
         
         salesData.push({
@@ -374,7 +434,7 @@ export const useDashboardData = (timeframe: string = 'Today') => {
       
       // Campaign stats
       const totalSent = campaigns.reduce((sum, campaign) => sum + (campaign.total_sent || 0), 0);
-      const campaignRevenue = campaigns.reduce((sum, campaign) => sum + (campaign.revenue_generated || 0), 0);
+      const campaignRevenue = campaigns.reduce((sum, campaign) => sum + (Number(campaign.revenue_generated) || 0), 0);
       const campaignVisits = campaigns.reduce((sum, campaign) => sum + (campaign.total_clicked || 0), 0);
       
       // Loyalty stats
@@ -561,7 +621,7 @@ export const useDashboardData = (timeframe: string = 'Today') => {
       console.error('Error fetching dashboard data:', err);
       setError(err instanceof Error ? err.message : 'Failed to fetch dashboard data');
       
-      // Set fallback data to prevent infinite loading
+      // Always set fallback data to prevent infinite loading
       setData(createFallbackData());
     } finally {
       setLoading(false);
@@ -569,7 +629,18 @@ export const useDashboardData = (timeframe: string = 'Today') => {
   };
 
   useEffect(() => {
+    // Add a timeout to prevent infinite loading
+    const timeoutId = setTimeout(() => {
+      if (loading) {
+        console.warn('Dashboard data fetch timeout - using fallback data');
+        setData(createFallbackData());
+        setLoading(false);
+      }
+    }, 10000); // 10 second timeout
+
     fetchDashboardData();
+
+    return () => clearTimeout(timeoutId);
   }, [timeframe]);
 
   return { data, loading, error, refetch: fetchDashboardData };
